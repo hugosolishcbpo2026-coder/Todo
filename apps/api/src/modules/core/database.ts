@@ -96,6 +96,18 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_payments_type ON payments(type);
     `,
   },
+  {
+    id: "0002_otp_codes",
+    up: `
+      CREATE TABLE otp_codes (
+        phone TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 /** Resolve the SQLite file path from env, defaulting to ./data/todo.db (cwd). */

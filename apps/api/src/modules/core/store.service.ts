@@ -116,6 +116,31 @@ export class StoreService {
     return row ? this.toUser(row) : undefined;
   }
 
+  // --- OTP codes -----------------------------------------------------------
+
+  /** Store (or replace) the pending OTP for a phone number. */
+  saveOtp(phone: string, code: string, expiresAt: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO otp_codes (phone, code, expires_at, attempts, created_at)
+         VALUES (?, ?, ?, 0, ?)
+         ON CONFLICT(phone) DO UPDATE SET
+           code = excluded.code, expires_at = excluded.expires_at, attempts = 0, created_at = excluded.created_at`,
+      )
+      .run(phone, code, expiresAt, this.now());
+  }
+
+  getOtp(phone: string): { code: string; expiresAt: string } | undefined {
+    const row = this.db.prepare("SELECT code, expires_at FROM otp_codes WHERE phone = ?").get(phone) as
+      | Row
+      | undefined;
+    return row ? { code: String(row.code), expiresAt: String(row.expires_at) } : undefined;
+  }
+
+  deleteOtp(phone: string): void {
+    this.db.prepare("DELETE FROM otp_codes WHERE phone = ?").run(phone);
+  }
+
   // --- Drivers -------------------------------------------------------------
 
   createDriver(userId: string, vehicle?: Driver["vehicle"]): Driver {
