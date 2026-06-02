@@ -1,8 +1,11 @@
 import { Controller, Get } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { Roles } from "../auth/auth.decorators";
 import { AdminService } from "./admin.service";
 
 @ApiTags("admin")
+@ApiBearerAuth()
+@Roles("admin")
 @Controller("admin")
 export class AdminController {
   constructor(private readonly admin: AdminService) {}
@@ -16,5 +19,9 @@ export class AdminController {
   analytics() {
     return this.admin.analytics();
   }
-}
 
+  @Get("rides")
+  rides() {
+    return this.admin.recentRides();
+  }
+}

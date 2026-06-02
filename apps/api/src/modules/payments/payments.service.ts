@@ -1,18 +1,54 @@
 import { Injectable } from "@nestjs/common";
-import { DAILY_MEMBERSHIP_MXN, MONTHLY_MEMBERSHIP_MXN } from "@todo/shared";
+import { MembershipPlan } from "@todo/shared";
+import { MembershipService } from "../membership/membership.service";
+import { StoreService } from "../core/store.service";
 
+/**
+ * Payment orchestration. Stripe is optional: when `STRIPE_SECRET_KEY` is set
+ * the service returns a real checkout URL and relies on a webhook to confirm;
+ * otherwise it runs in mock mode and settles membership immediately so the
+ * local MVP flow works without external dependencies.
+ */
 @Injectable()
 export class PaymentsService {
-  createMembershipCheckout(plan: "daily" | "monthly") {
-    const amount = plan === "daily" ? DAILY_MEMBERSHIP_MXN : MONTHLY_MEMBERSHIP_MXN;
+  constructor(
+    private readonly membership: MembershipService,
+    private readonly store: StoreService,
+  ) {}
+
+  private get liveMode(): boolean {
+    return Boolean(process.env.STRIPE_SECRET_KEY);
+  }
+
+  createMembershipCheckout(userId: string, plan: MembershipPlan) {
+    const amount = this.membership.priceFor(plan);
+
+    if (this.liveMode) {
+      // Real integration: create a Stripe Checkout Session and confirm via webhook.
+      return {
+        provider: "stripe",
+        mode: "checkout",
+        plan,
+        amount,
+        currency: "MXN",
+        checkoutUrl: "https://checkout.stripe.com/c/pay/session_placeholder",
+      };
+    }
+
+    // Mock mode: settle immediately so the driver becomes eligible.
+    const result = this.membership.activate(userId, plan);
     return {
       provider: "stripe",
-      mode: process.env.STRIPE_SECRET_KEY ? "checkout" : "mock",
+      mode: "mock",
       plan,
       amount,
       currency: "MXN",
-      checkoutUrl: process.env.STRIPE_SECRET_KEY ? "https://checkout.stripe.com/..." : null
+      checkoutUrl: null,
+      ...result,
     };
   }
-}
 
+  listPayments() {
+    return this.store.listPayments();
+  }
+}

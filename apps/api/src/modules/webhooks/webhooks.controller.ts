@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Post, Query } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import { Public } from "../auth/auth.decorators";
 
 @ApiTags("webhooks")
+@Public()
 @Controller("webhooks")
 export class WebhooksController {
   @Post("stripe")

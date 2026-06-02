@@ -1,40 +1,29 @@
 import { Body, Controller, Get, Post } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { AuthService } from "./auth.service";
-
-class RequestOtpDto {
-  phone!: string;
-}
-
-class VerifyOtpDto {
-  phone!: string;
-  code!: string;
-  role!: "rider" | "driver" | "admin" | "support";
-}
+import { CurrentUser, Public } from "./auth.decorators";
+import { RequestOtpDto, VerifyOtpDto } from "./auth.dto";
 
 @ApiTags("auth")
 @Controller("auth")
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  @Public()
   @Post("otp/request")
   requestOtp(@Body() dto: RequestOtpDto) {
     return this.auth.requestOtp(dto.phone);
   }
 
+  @Public()
   @Post("otp/verify")
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.auth.verifyOtp(dto);
   }
 
+  @ApiBearerAuth()
   @Get("me")
-  me() {
-    return {
-      id: "dev-user",
-      role: "admin",
-      name: "Todo Operator",
-      permissions: ["admin:read", "admin:write"]
-    };
+  me(@CurrentUser("sub") userId: string) {
+    return this.auth.me(userId);
   }
 }
-
