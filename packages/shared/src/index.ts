@@ -1,3 +1,5 @@
+export * from "./client";
+
 export type UserRole = "rider" | "driver" | "admin" | "support";
 
 export type RideStatus =
