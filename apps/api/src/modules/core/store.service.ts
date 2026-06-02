@@ -1,4 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
+import type { DatabaseSync } from "node:sqlite";
+import { randomUUID } from "node:crypto";
 import {
   Driver,
   DriverEarnings,
@@ -12,55 +14,106 @@ import {
   User,
   UserRole,
 } from "@todo/shared";
-import { randomUUID } from "node:crypto";
+import { Row, SQLITE_DB } from "./database";
 
 /**
- * In-memory persistence layer acting as the single source of truth for the
- * API. Every module reads and writes domain state through this service.
- *
- * It is intentionally framework-agnostic and side-effect free so it can be
- * swapped for a PostgreSQL-backed implementation (same method surface) without
- * touching the modules that depend on it.
+ * Durable persistence layer (SQLite via node:sqlite) and the single source of
+ * truth for the API. Every module reads and writes domain state through this
+ * service. The public method surface is storage-agnostic, so a PostgreSQL
+ * implementation could replace it without touching dependent modules.
  */
 @Injectable()
 export class StoreService {
-  private readonly logger = new Logger(StoreService.name);
-
-  private readonly users = new Map<string, User>();
-  private readonly drivers = new Map<string, Driver>();
-  private readonly memberships = new Map<string, Membership>();
-  private readonly rides = new Map<string, Ride>();
-  private readonly payments = new Map<string, Payment>();
-  private readonly ledger: LedgerEntry[] = [];
+  constructor(@Inject(SQLITE_DB) private readonly db: DatabaseSync) {}
 
   private now(): string {
     return new Date().toISOString();
   }
 
+  // --- Row mappers ---------------------------------------------------------
+
+  private toUser = (r: Row): User => ({
+    id: String(r.id),
+    phone: String(r.phone),
+    role: r.role as UserRole,
+    name: r.name == null ? undefined : String(r.name),
+    createdAt: String(r.created_at),
+  });
+
+  private toDriver = (r: Row): Driver => ({
+    id: String(r.id),
+    userId: String(r.user_id),
+    status: r.status as Driver["status"],
+    online: Boolean(r.online),
+    rating: Number(r.rating),
+    acceptanceRate: Number(r.acceptance_rate),
+    location: r.location_json ? (JSON.parse(String(r.location_json)) as DriverLocation) : undefined,
+    vehicle: r.vehicle_json ? (JSON.parse(String(r.vehicle_json)) as Driver["vehicle"]) : undefined,
+    createdAt: String(r.created_at),
+  });
+
+  private toMembership = (r: Row): Membership => ({
+    id: String(r.id),
+    driverId: String(r.driver_id),
+    plan: r.plan as MembershipPlan,
+    status: r.status as Membership["status"],
+    startedAt: String(r.started_at),
+    expiresAt: String(r.expires_at),
+  });
+
+  private toRide = (r: Row): Ride => ({
+    id: String(r.id),
+    status: r.status as Ride["status"],
+    riderId: String(r.rider_id),
+    driverId: r.driver_id == null ? undefined : String(r.driver_id),
+    pickup: JSON.parse(String(r.pickup_json)),
+    dropoff: JSON.parse(String(r.dropoff_json)),
+    paymentMethod: r.payment_method as Ride["paymentMethod"],
+    fare: Number(r.fare),
+    estimate: JSON.parse(String(r.estimate_json)),
+    createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at),
+    acceptedAt: r.accepted_at == null ? undefined : String(r.accepted_at),
+    completedAt: r.completed_at == null ? undefined : String(r.completed_at),
+    cancelledAt: r.cancelled_at == null ? undefined : String(r.cancelled_at),
+    events: JSON.parse(String(r.events_json)),
+  });
+
+  private toPayment = (r: Row): Payment => ({
+    id: String(r.id),
+    type: r.type as Payment["type"],
+    status: r.status as Payment["status"],
+    amount: Number(r.amount),
+    currency: "MXN",
+    createdAt: String(r.created_at),
+    rideId: r.ride_id == null ? undefined : String(r.ride_id),
+    riderId: r.rider_id == null ? undefined : String(r.rider_id),
+    driverId: r.driver_id == null ? undefined : String(r.driver_id),
+    plan: r.plan == null ? undefined : (r.plan as MembershipPlan),
+  });
+
   // --- Users ---------------------------------------------------------------
 
-  /** Find an existing user by phone or create one (idempotent OTP login). */
   upsertUserByPhone(phone: string, role: UserRole, name?: string): User {
-    const existing = [...this.users.values()].find((u) => u.phone === phone);
+    const existing = this.db.prepare("SELECT * FROM users WHERE phone = ?").get(phone) as
+      | Row
+      | undefined;
     if (existing) {
-      // Allow role to be (re)asserted on login; keep the first known name.
-      existing.role = role;
-      if (name && !existing.name) existing.name = name;
-      return existing;
+      this.db
+        .prepare("UPDATE users SET role = ?, name = COALESCE(name, ?) WHERE id = ?")
+        .run(role, name ?? null, String(existing.id));
+      return this.toUser(this.db.prepare("SELECT * FROM users WHERE id = ?").get(existing.id) as Row);
     }
-    const user: User = {
-      id: `usr_${randomUUID()}`,
-      phone,
-      role,
-      name,
-      createdAt: this.now(),
-    };
-    this.users.set(user.id, user);
+    const user: User = { id: `usr_${randomUUID()}`, phone, role, name, createdAt: this.now() };
+    this.db
+      .prepare("INSERT INTO users (id, phone, role, name, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(user.id, user.phone, user.role, user.name ?? null, user.createdAt);
     return user;
   }
 
   getUser(id: string): User | undefined {
-    return this.users.get(id);
+    const row = this.db.prepare("SELECT * FROM users WHERE id = ?").get(id) as Row | undefined;
+    return row ? this.toUser(row) : undefined;
   }
 
   // --- Drivers -------------------------------------------------------------
@@ -71,50 +124,69 @@ export class StoreService {
     const driver: Driver = {
       id: `drv_${randomUUID()}`,
       userId,
-      // Auto-approved for MVP; real onboarding review is a future step.
-      status: "approved",
+      status: "approved", // Auto-approved for MVP; review flow is a future step.
       online: false,
       rating: 5,
       acceptanceRate: 100,
       vehicle,
       createdAt: this.now(),
     };
-    this.drivers.set(driver.id, driver);
+    this.db
+      .prepare(
+        `INSERT INTO drivers (id, user_id, status, online, rating, acceptance_rate, vehicle_json, created_at)
+         VALUES (?, ?, ?, 0, ?, ?, ?, ?)`,
+      )
+      .run(
+        driver.id,
+        driver.userId,
+        driver.status,
+        driver.rating,
+        driver.acceptanceRate,
+        vehicle ? JSON.stringify(vehicle) : null,
+        driver.createdAt,
+      );
     return driver;
   }
 
   getDriver(id: string): Driver | undefined {
-    return this.drivers.get(id);
+    const row = this.db.prepare("SELECT * FROM drivers WHERE id = ?").get(id) as Row | undefined;
+    return row ? this.toDriver(row) : undefined;
   }
 
   getDriverByUserId(userId: string): Driver | undefined {
-    return [...this.drivers.values()].find((d) => d.userId === userId);
+    const row = this.db.prepare("SELECT * FROM drivers WHERE user_id = ?").get(userId) as
+      | Row
+      | undefined;
+    return row ? this.toDriver(row) : undefined;
   }
 
   setDriverOnline(driverId: string, online: boolean): Driver | undefined {
-    const driver = this.drivers.get(driverId);
-    if (!driver) return undefined;
-    driver.online = online;
-    return driver;
+    this.db.prepare("UPDATE drivers SET online = ? WHERE id = ?").run(online ? 1 : 0, driverId);
+    return this.getDriver(driverId);
   }
 
   updateDriverLocation(driverId: string, location: DriverLocation): Driver | undefined {
-    const driver = this.drivers.get(driverId);
-    if (!driver) return undefined;
-    driver.location = location;
-    return driver;
+    this.db
+      .prepare("UPDATE drivers SET location_json = ? WHERE id = ?")
+      .run(JSON.stringify(location), driverId);
+    return this.getDriver(driverId);
   }
 
   /** Drivers eligible to receive ride offers: approved, online, paid-up, located. */
   listDispatchableDrivers(): Driver[] {
-    return [...this.drivers.values()].filter(
-      (d) => d.status === "approved" && d.online && !!d.location && this.isMembershipActive(d.id),
-    );
+    const rows = this.db
+      .prepare(
+        `SELECT d.* FROM drivers d
+         JOIN memberships m ON m.driver_id = d.id
+         WHERE d.status = 'approved' AND d.online = 1
+           AND d.location_json IS NOT NULL AND m.expires_at > ?`,
+      )
+      .all(this.now()) as Row[];
+    return rows.map(this.toDriver);
   }
 
   // --- Memberships ---------------------------------------------------------
 
-  /** Activate or extend a driver's membership. Stacks onto remaining time. */
   activateMembership(driverId: string, plan: MembershipPlan): Membership {
     const duration = MEMBERSHIP_DURATION_MS[plan];
     const current = this.getMembership(driverId);
@@ -130,18 +202,36 @@ export class StoreService {
       startedAt: current?.startedAt ?? this.now(),
       expiresAt: new Date(base + duration).toISOString(),
     };
-    this.memberships.set(driverId, membership);
+    this.db
+      .prepare(
+        `INSERT INTO memberships (driver_id, id, plan, status, started_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(driver_id) DO UPDATE SET
+           plan = excluded.plan, status = excluded.status, expires_at = excluded.expires_at`,
+      )
+      .run(
+        membership.driverId,
+        membership.id,
+        membership.plan,
+        membership.status,
+        membership.startedAt,
+        membership.expiresAt,
+      );
     return membership;
   }
 
   getMembership(driverId: string): Membership | undefined {
-    return this.memberships.get(driverId);
+    const row = this.db.prepare("SELECT * FROM memberships WHERE driver_id = ?").get(driverId) as
+      | Row
+      | undefined;
+    return row ? this.toMembership(row) : undefined;
   }
 
   isMembershipActive(driverId: string): boolean {
-    const membership = this.memberships.get(driverId);
-    if (!membership) return false;
-    return new Date(membership.expiresAt).getTime() > Date.now();
+    const row = this.db
+      .prepare("SELECT expires_at FROM memberships WHERE driver_id = ?")
+      .get(driverId) as Row | undefined;
+    return row ? new Date(String(row.expires_at)).getTime() > Date.now() : false;
   }
 
   // --- Rides ---------------------------------------------------------------
@@ -155,61 +245,128 @@ export class StoreService {
       updatedAt: ts,
       events: [{ status: ride.status, at: ts }],
     };
-    this.rides.set(record.id, record);
+    this.db
+      .prepare(
+        `INSERT INTO rides (id, status, rider_id, driver_id, pickup_json, dropoff_json,
+           payment_method, fare, estimate_json, created_at, updated_at,
+           accepted_at, completed_at, cancelled_at, events_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        record.id,
+        record.status,
+        record.riderId,
+        record.driverId ?? null,
+        JSON.stringify(record.pickup),
+        JSON.stringify(record.dropoff),
+        record.paymentMethod,
+        record.fare,
+        JSON.stringify(record.estimate),
+        record.createdAt,
+        record.updatedAt,
+        record.acceptedAt ?? null,
+        record.completedAt ?? null,
+        record.cancelledAt ?? null,
+        JSON.stringify(record.events),
+      );
     return record;
   }
 
   getRide(id: string): Ride | undefined {
-    return this.rides.get(id);
+    const row = this.db.prepare("SELECT * FROM rides WHERE id = ?").get(id) as Row | undefined;
+    return row ? this.toRide(row) : undefined;
   }
 
   updateRide(id: string, patch: Partial<Ride>): Ride | undefined {
-    const ride = this.rides.get(id);
+    const ride = this.getRide(id);
     if (!ride) return undefined;
     Object.assign(ride, patch, { updatedAt: this.now() });
     if (patch.status && patch.status !== ride.events.at(-1)?.status) {
       ride.events.push({ status: patch.status, at: ride.updatedAt });
     }
+    this.db
+      .prepare(
+        `UPDATE rides SET status = ?, driver_id = ?, fare = ?, updated_at = ?,
+           accepted_at = ?, completed_at = ?, cancelled_at = ?, events_json = ?
+         WHERE id = ?`,
+      )
+      .run(
+        ride.status,
+        ride.driverId ?? null,
+        ride.fare,
+        ride.updatedAt,
+        ride.acceptedAt ?? null,
+        ride.completedAt ?? null,
+        ride.cancelledAt ?? null,
+        JSON.stringify(ride.events),
+        id,
+      );
     return ride;
   }
 
   listRides(): Ride[] {
-    return [...this.rides.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const rows = this.db.prepare("SELECT * FROM rides ORDER BY created_at DESC").all() as Row[];
+    return rows.map(this.toRide);
   }
 
   // --- Payments & ledger ---------------------------------------------------
 
   createPayment(payment: Omit<Payment, "id" | "createdAt">): Payment {
     const record: Payment = { ...payment, id: `pay_${randomUUID()}`, createdAt: this.now() };
-    this.payments.set(record.id, record);
+    this.db
+      .prepare(
+        `INSERT INTO payments (id, type, status, amount, currency, created_at, ride_id, rider_id, driver_id, plan)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        record.id,
+        record.type,
+        record.status,
+        record.amount,
+        record.currency,
+        record.createdAt,
+        record.rideId ?? null,
+        record.riderId ?? null,
+        record.driverId ?? null,
+        record.plan ?? null,
+      );
     return record;
   }
 
   listPayments(): Payment[] {
-    return [...this.payments.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const rows = this.db
+      .prepare("SELECT * FROM payments ORDER BY created_at DESC")
+      .all() as Row[];
+    return rows.map(this.toPayment);
   }
 
   addLedgerEntry(entry: Omit<LedgerEntry, "id" | "createdAt">): LedgerEntry {
     const record: LedgerEntry = { ...entry, id: `led_${randomUUID()}`, createdAt: this.now() };
-    this.ledger.push(record);
+    this.db
+      .prepare(
+        "INSERT INTO ledger (id, driver_id, type, amount, ride_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run(record.id, record.driverId, record.type, record.amount, record.rideId ?? null, record.createdAt);
     return record;
   }
 
   getDriverEarnings(driverId: string): DriverEarnings {
-    const entries = this.ledger.filter((e) => e.driverId === driverId && e.type === "ride_earning");
+    const rows = this.db
+      .prepare("SELECT amount, created_at FROM ledger WHERE driver_id = ? AND type = 'ride_earning'")
+      .all(driverId) as Row[];
     const dayMs = 24 * 60 * 60 * 1000;
     const startOfToday = new Date().setHours(0, 0, 0, 0);
     const startOfWeek = startOfToday - 6 * dayMs;
     const sum = (since: number) =>
-      entries
-        .filter((e) => new Date(e.createdAt).getTime() >= since)
-        .reduce((acc, e) => acc + e.amount, 0);
+      rows
+        .filter((r) => new Date(String(r.created_at)).getTime() >= since)
+        .reduce((acc, r) => acc + Number(r.amount), 0);
     return {
       currency: "MXN",
       today: Math.round(sum(startOfToday) * 100) / 100,
       week: Math.round(sum(startOfWeek) * 100) / 100,
-      allTime: Math.round(entries.reduce((acc, e) => acc + e.amount, 0) * 100) / 100,
-      rides: entries.length,
+      allTime: Math.round(rows.reduce((acc, r) => acc + Number(r.amount), 0) * 100) / 100,
+      rides: rows.length,
       platformCommission: 0,
     };
   }
@@ -217,23 +374,21 @@ export class StoreService {
   // --- Aggregates (admin) --------------------------------------------------
 
   snapshot() {
-    const rides = [...this.rides.values()];
-    const activeRides = rides.filter(
-      (r) => !["completed", "cancelled"].includes(r.status),
-    ).length;
-    const onlineDrivers = [...this.drivers.values()].filter((d) => d.online).length;
-    const expiringMemberships = [...this.memberships.values()].filter((m) => {
-      const ms = new Date(m.expiresAt).getTime() - Date.now();
-      return ms > 0 && ms < 24 * 60 * 60 * 1000;
-    }).length;
+    const count = (sql: string, ...params: Array<string | number>) =>
+      Number((this.db.prepare(sql).get(...params) as Row).n);
+    const dayFromNow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     return {
-      users: this.users.size,
-      drivers: this.drivers.size,
-      onlineDrivers,
-      activeRides,
-      totalRides: rides.length,
-      expiringMemberships,
-      payments: this.payments.size,
+      users: count("SELECT COUNT(*) n FROM users"),
+      drivers: count("SELECT COUNT(*) n FROM drivers"),
+      onlineDrivers: count("SELECT COUNT(*) n FROM drivers WHERE online = 1"),
+      activeRides: count("SELECT COUNT(*) n FROM rides WHERE status NOT IN ('completed','cancelled')"),
+      totalRides: count("SELECT COUNT(*) n FROM rides"),
+      expiringMemberships: count(
+        "SELECT COUNT(*) n FROM memberships WHERE expires_at > ? AND expires_at < ?",
+        this.now(),
+        dayFromNow,
+      ),
+      payments: count("SELECT COUNT(*) n FROM payments"),
     };
   }
 }

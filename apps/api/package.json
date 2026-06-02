@@ -8,7 +8,9 @@
     "start": "node dist/apps/api/src/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "jest --passWithNoTests"
+    "test": "jest --passWithNoTests",
+    "db:seed": "node dist/apps/api/src/scripts/seed.js",
+    "db:backup": "node dist/apps/api/src/scripts/backup.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

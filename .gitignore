@@ -9,3 +9,10 @@ coverage
 *.log
 *.tsbuildinfo
 
+# Local SQLite database, backups and exports (never commit data)
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
