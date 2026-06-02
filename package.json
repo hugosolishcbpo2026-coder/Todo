@@ -1,0 +1,18 @@
+{
+  "name": "todo-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Todo driver-first ride platform monorepo",
+  "scripts": {
+    "dev": "corepack pnpm@9.12.3 --parallel --filter @todo/api --filter @todo/admin dev",
+    "build": "corepack pnpm@9.12.3 --recursive build",
+    "test": "corepack pnpm@9.12.3 --recursive test",
+    "lint": "corepack pnpm@9.12.3 --recursive lint",
+    "typecheck": "corepack pnpm@9.12.3 --recursive typecheck"
+  },
+  "packageManager": "pnpm@9.12.3",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
