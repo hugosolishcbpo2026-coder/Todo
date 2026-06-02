@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
+import type { Socket } from "socket.io-client";
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -10,10 +11,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { DAILY_MEMBERSHIP_MXN, Ride, TodoApiError } from "@todo/shared";
+import { DAILY_MEMBERSHIP_MXN, RealtimeEvents, Ride, TodoApiError } from "@todo/shared";
 import { api, DRIVER_START_LOCATION } from "./src/api";
+import { connectDriverSocket } from "./src/socket";
 
-const POLL_MS = 3000;
 const peso = (n: number) => `$${Math.round(n).toLocaleString("en-US")} MXN`;
 
 interface DriverState {
@@ -79,6 +80,8 @@ function Dashboard() {
   const [active, setActive] = useState<Ride>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
+  const onlineRef = useRef(false);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -96,32 +99,26 @@ function Dashboard() {
 
   useEffect(() => {
     void refreshStatus();
-  }, [refreshStatus]);
+    // Resume an in-progress ride if the app restarted mid-trip.
+    api
+      .myActiveRides()
+      .then((rides) => rides[0] && setActive(rides[0]))
+      .catch(() => undefined);
 
-  // Poll for active ride + new offers while online and eligible.
-  useEffect(() => {
-    if (!state.online) return;
-    const tick = async () => {
-      try {
-        const mine = await api.myActiveRides();
-        if (mine.length > 0) {
-          setActive(mine[0]);
-          setOffer(undefined);
-          return;
-        }
-        setActive(undefined);
-        if (state.membershipActive) {
-          const available = await api.availableRides();
-          setOffer(available[0]);
-        }
-      } catch {
-        /* transient; will retry next tick */
-      }
+    // Realtime push: receive ride offers instead of polling.
+    const socket = connectDriverSocket({
+      onConnect: () => {
+        if (onlineRef.current) socket.emit(RealtimeEvents.DriversSubscribe);
+      },
+      onOffer: (ride) => setOffer((current) => current ?? ride),
+      onTaken: ({ rideId }) => setOffer((current) => (current?.id === rideId ? undefined : current)),
+    });
+    socketRef.current = socket;
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
     };
-    void tick();
-    const timer = setInterval(tick, POLL_MS);
-    return () => clearInterval(timer);
-  }, [state.online, state.membershipActive]);
+  }, [refreshStatus]);
 
   async function run(label: string, fn: () => Promise<unknown>) {
     setBusy(true);
@@ -145,7 +142,18 @@ function Dashboard() {
     run("Toggle", async () => {
       const next = !state.online;
       await api.setOnline(next);
-      if (next) await api.updateLocation(DRIVER_START_LOCATION);
+      onlineRef.current = next;
+      const socket = socketRef.current;
+      if (next) {
+        await api.updateLocation(DRIVER_START_LOCATION);
+        socket?.emit(RealtimeEvents.DriversSubscribe);
+        // Pick up any rider already waiting before we subscribed.
+        const waiting = await api.availableRides().catch(() => []);
+        if (waiting[0]) setOffer((current) => current ?? waiting[0]);
+      } else {
+        socket?.emit(RealtimeEvents.DriversUnsubscribe);
+        setOffer(undefined);
+      }
       setState((s) => ({ ...s, online: next }));
     });
 

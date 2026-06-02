@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { AdminAnalytics, AdminLiveOps, Ride, TodoApiError } from "@todo/shared";
 import { Banknote, Car, LogOut, RadioTower, RefreshCw, Users, Wallet } from "lucide-react";
 import { api, bootstrapAuth, clearToken, saveToken } from "./lib/api";
+import { connectAdminSocket } from "./lib/socket";
 
-const REFRESH_MS = 5000;
+// Socket pushes drive updates; this is only a slow safety-net refresh.
+const REFRESH_MS = 30000;
 const peso = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 
 interface Dashboard {
@@ -112,8 +114,12 @@ function Operations({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => {
     void refresh();
+    const socket = connectAdminSocket(() => void refresh());
     const timer = setInterval(() => void refresh(), REFRESH_MS);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      socket.disconnect();
+    };
   }, [refresh]);
 
   const metrics = data && [

@@ -10,10 +10,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { DriverMatch, FareEstimate, Ride, TodoApiError } from "@todo/shared";
+import { DriverMatch, FareEstimate, Ride } from "@todo/shared";
 import { api, PRESET_LOCATIONS } from "./src/api";
+import { connectRideSocket } from "./src/socket";
 
-const POLL_MS = 3000;
 const peso = (n: number) => `$${Math.round(n)} MXN`;
 const STATUS_LABEL: Record<string, string> = {
   requested: "Finding your driver…",
@@ -175,14 +175,12 @@ function Tracking({
 
   useEffect(() => {
     if (done) return;
-    const timer = setInterval(async () => {
-      try {
-        onUpdate(await api.getRide(ride.id));
-      } catch (err) {
-        if (!(err instanceof TodoApiError)) setError("Connection lost — retrying");
-      }
-    }, POLL_MS);
-    return () => clearInterval(timer);
+    const socket = connectRideSocket(ride.id, onUpdate);
+    socket.on("connect_error", () => setError("Reconnecting…"));
+    socket.on("connect", () => setError(undefined));
+    return () => {
+      socket.disconnect();
+    };
   }, [ride.id, done, onUpdate]);
 
   async function cancel() {

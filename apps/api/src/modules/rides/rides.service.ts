@@ -76,6 +76,7 @@ export class RidesService {
     });
 
     this.realtime.emitRideUpdate(ride.id, ride);
+    this.realtime.emitRideOffer(ride); // push the offer to online drivers
     await this.notifications.notifyRideRequested(ride.id, matches[0]?.driverId);
 
     return { ride, estimate, matches };
@@ -112,6 +113,7 @@ export class RidesService {
 
     const updated = this.store.updateRide(id, { status: "driver_assigned", driverId: driver.id, acceptedAt: new Date().toISOString() })!;
     this.realtime.emitRideUpdate(id, updated);
+    this.realtime.emitRideTaken(id); // remove the offer from other drivers
     await this.notifications.notifyDriverAssigned(id, driver.id);
     return updated;
   }
@@ -166,6 +168,7 @@ export class RidesService {
       cancelledAt: new Date().toISOString(),
     })!;
     this.realtime.emitRideUpdate(id, cancelled);
+    this.realtime.emitRideTaken(id); // withdraw any pending offer
     return cancelled;
   }
 }

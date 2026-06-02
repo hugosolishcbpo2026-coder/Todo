@@ -1,4 +1,5 @@
 export * from "./client";
+export * from "./realtime";
 
 export type UserRole = "rider" | "driver" | "admin" | "support";
 
