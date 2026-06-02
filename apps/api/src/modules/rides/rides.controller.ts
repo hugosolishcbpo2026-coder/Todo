@@ -22,6 +22,19 @@ export class RidesController {
     return this.rides.requestRide(riderId, dto);
   }
 
+  // Static routes must be declared before the ":id" param route.
+  @Roles("driver")
+  @Get("available")
+  available(@CurrentUser("sub") driverUserId: string) {
+    return this.rides.availableForDriver(driverUserId);
+  }
+
+  @Roles("driver")
+  @Get("mine")
+  mine(@CurrentUser("sub") driverUserId: string) {
+    return this.rides.activeForDriver(driverUserId);
+  }
+
   @Get(":id")
   getRide(@Param("id") id: string) {
     return this.rides.getRide(id);

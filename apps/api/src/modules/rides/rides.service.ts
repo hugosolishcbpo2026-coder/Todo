@@ -85,6 +85,22 @@ export class RidesService {
     return this.requireRide(id);
   }
 
+  /** Open ride offers a driver can accept (still in `requested` state). */
+  availableForDriver(driverUserId: string): Ride[] {
+    const driver = this.store.getDriverByUserId(driverUserId);
+    if (!driver) return [];
+    return this.store.listRides().filter((r) => r.status === "requested");
+  }
+
+  /** The driver's own in-progress rides. */
+  activeForDriver(driverUserId: string): Ride[] {
+    const driver = this.store.getDriverByUserId(driverUserId);
+    if (!driver) return [];
+    return this.store
+      .listRides()
+      .filter((r) => r.driverId === driver.id && !TERMINAL_RIDE_STATUSES.includes(r.status));
+  }
+
   async acceptRide(id: string, driverUserId: string) {
     const ride = this.requireRide(id);
     const driver = this.store.getDriverByUserId(driverUserId);

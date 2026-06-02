@@ -138,6 +138,16 @@ export class TodoApiClient {
     return this.request<Ride>("GET", `/rides/${id}`);
   }
 
+  /** Driver: open ride offers that can be accepted. */
+  availableRides() {
+    return this.request<Ride[]>("GET", "/rides/available");
+  }
+
+  /** Driver: own in-progress rides. */
+  myActiveRides() {
+    return this.request<Ride[]>("GET", "/rides/mine");
+  }
+
   acceptRide(id: string) {
     return this.request<Ride>("POST", `/rides/${id}/accept`);
   }
