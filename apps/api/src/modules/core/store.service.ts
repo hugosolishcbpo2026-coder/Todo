@@ -11,6 +11,9 @@ import {
   MEMBERSHIP_DURATION_MS,
   Payment,
   Ride,
+  Subscription,
+  SubscriptionPlan,
+  SubscriptionStatus,
   User,
   UserRole,
 } from "@todo/shared";
@@ -394,6 +397,111 @@ export class StoreService {
       rides: rows.length,
       platformCommission: 0,
     };
+  }
+
+  // --- Subscriptions (Stripe, server-authoritative) ------------------------
+
+  private toSubscription = (r: Row): Subscription => ({
+    id: String(r.id),
+    userId: String(r.user_id),
+    plan: r.plan as SubscriptionPlan,
+    status: r.status as SubscriptionStatus,
+    stripeCustomerId: r.stripe_customer_id == null ? undefined : String(r.stripe_customer_id),
+    stripeSubscriptionId:
+      r.stripe_subscription_id == null ? undefined : String(r.stripe_subscription_id),
+    currentPeriodEnd: r.current_period_end == null ? undefined : String(r.current_period_end),
+    createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at),
+  });
+
+  /** Insert or update a user's subscription (keyed by user). */
+  upsertSubscription(
+    sub: Partial<Subscription> & Pick<Subscription, "userId" | "plan" | "status">,
+  ): Subscription {
+    const existing = this.getSubscriptionByUser(sub.userId);
+    const now = this.now();
+    const record: Subscription = {
+      id: existing?.id ?? `sub_${randomUUID()}`,
+      userId: sub.userId,
+      plan: sub.plan,
+      status: sub.status,
+      stripeCustomerId: sub.stripeCustomerId ?? existing?.stripeCustomerId,
+      stripeSubscriptionId: sub.stripeSubscriptionId ?? existing?.stripeSubscriptionId,
+      currentPeriodEnd: sub.currentPeriodEnd ?? existing?.currentPeriodEnd,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.db
+      .prepare(
+        `INSERT INTO subscriptions (user_id, id, plan, status, stripe_customer_id,
+           stripe_subscription_id, current_period_end, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           plan = excluded.plan, status = excluded.status,
+           stripe_customer_id = excluded.stripe_customer_id,
+           stripe_subscription_id = excluded.stripe_subscription_id,
+           current_period_end = excluded.current_period_end,
+           updated_at = excluded.updated_at`,
+      )
+      .run(
+        record.userId,
+        record.id,
+        record.plan,
+        record.status,
+        record.stripeCustomerId ?? null,
+        record.stripeSubscriptionId ?? null,
+        record.currentPeriodEnd ?? null,
+        record.createdAt,
+        record.updatedAt,
+      );
+    return record;
+  }
+
+  getSubscriptionByUser(userId: string): Subscription | undefined {
+    const row = this.db.prepare("SELECT * FROM subscriptions WHERE user_id = ?").get(userId) as
+      | Row
+      | undefined;
+    return row ? this.toSubscription(row) : undefined;
+  }
+
+  getSubscriptionByStripeId(stripeSubscriptionId: string): Subscription | undefined {
+    const row = this.db
+      .prepare("SELECT * FROM subscriptions WHERE stripe_subscription_id = ?")
+      .get(stripeSubscriptionId) as Row | undefined;
+    return row ? this.toSubscription(row) : undefined;
+  }
+
+  getSubscriptionByCustomer(stripeCustomerId: string): Subscription | undefined {
+    const row = this.db
+      .prepare("SELECT * FROM subscriptions WHERE stripe_customer_id = ?")
+      .get(stripeCustomerId) as Row | undefined;
+    return row ? this.toSubscription(row) : undefined;
+  }
+
+  listSubscriptions(): Subscription[] {
+    const rows = this.db
+      .prepare("SELECT * FROM subscriptions ORDER BY updated_at DESC")
+      .all() as Row[];
+    return rows.map(this.toSubscription);
+  }
+
+  // --- Webhook idempotency (replay protection) -----------------------------
+
+  /** Returns true if this provider event was already processed. */
+  isWebhookProcessed(eventId: string): boolean {
+    const row = this.db.prepare("SELECT id FROM webhook_events WHERE id = ?").get(eventId) as
+      | Row
+      | undefined;
+    return Boolean(row);
+  }
+
+  /** Record an event id as processed. Idempotent (INSERT OR IGNORE). */
+  markWebhookProcessed(eventId: string, provider: string, type: string): void {
+    this.db
+      .prepare(
+        "INSERT OR IGNORE INTO webhook_events (id, provider, type, processed_at) VALUES (?, ?, ?, ?)",
+      )
+      .run(eventId, provider, type, this.now());
   }
 
   // --- Aggregates (admin) --------------------------------------------------

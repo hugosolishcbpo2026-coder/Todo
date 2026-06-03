@@ -1,5 +1,6 @@
 export * from "./client";
 export * from "./realtime";
+export * from "./subscription";
 
 export type UserRole = "rider" | "driver" | "admin" | "support";
 

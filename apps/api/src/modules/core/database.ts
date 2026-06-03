@@ -108,6 +108,31 @@ export const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    id: "0003_subscriptions",
+    up: `
+      CREATE TABLE subscriptions (
+        user_id TEXT PRIMARY KEY,
+        id TEXT NOT NULL,
+        plan TEXT NOT NULL,
+        status TEXT NOT NULL,
+        stripe_customer_id TEXT,
+        stripe_subscription_id TEXT,
+        current_period_end TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_subscriptions_customer ON subscriptions(stripe_customer_id);
+      CREATE INDEX idx_subscriptions_stripe_sub ON subscriptions(stripe_subscription_id);
+
+      CREATE TABLE webhook_events (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        type TEXT NOT NULL,
+        processed_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 /** Resolve the SQLite file path from env, defaulting to ./data/todo.db (cwd). */
