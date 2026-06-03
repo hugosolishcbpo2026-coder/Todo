@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AdminAnalytics, AdminLiveOps, Ride, TodoApiError } from "@todo/shared";
+import { AdminAnalytics, AdminLiveOps, Payment, Ride, Subscription, TodoApiError } from "@todo/shared";
 import { Banknote, Car, LogOut, RadioTower, RefreshCw, Users, Wallet } from "lucide-react";
 import { api, bootstrapAuth, clearToken, saveToken } from "./lib/api";
 import { connectAdminSocket } from "./lib/socket";
@@ -14,6 +14,8 @@ interface Dashboard {
   live: AdminLiveOps;
   analytics: AdminAnalytics;
   rides: Ride[];
+  subscriptions: Subscription[];
+  payments: Payment[];
 }
 
 export default function AdminPage() {
@@ -95,12 +97,14 @@ function Operations({ onLogout }: { onLogout: () => void }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [live, analytics, rides] = await Promise.all([
+      const [live, analytics, rides, subscriptions, payments] = await Promise.all([
         api.adminLive(),
         api.adminAnalytics(),
         api.adminRides(),
+        api.adminSubscriptions(),
+        api.adminPayments(),
       ]);
-      setData({ live, analytics, rides });
+      setData({ live, analytics, rides, subscriptions, payments });
       setError(null);
       setUpdatedAt(new Date());
     } catch (err) {
@@ -219,7 +223,92 @@ function Operations({ onLogout }: { onLogout: () => void }) {
             </tbody>
           </table>
         </section>
+
+        <MembershipsPanel data={data} />
       </section>
     </main>
+  );
+}
+
+function MembershipsPanel({ data }: { data: Dashboard | null }) {
+  if (!data) return null;
+  const pastDue = data.subscriptions.filter((s) => s.status === "past_due");
+  const planLabel = (s: Subscription) => s.plan.charAt(0).toUpperCase() + s.plan.slice(1);
+
+  return (
+    <>
+      {pastDue.length > 0 && (
+        <div className="banner warn">
+          ⚠ {pastDue.length} subscription{pastDue.length > 1 ? "s" : ""} with failed payments (past due)
+        </div>
+      )}
+
+      <section className="tablePanel">
+        <div className="sectionTitle">
+          <h2>Memberships &amp; subscriptions</h2>
+          <span className="muted">{data.subscriptions.length} active records</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Plan</th>
+              <th>Status</th>
+              <th>Renews</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.subscriptions.length === 0 && (
+              <tr>
+                <td colSpan={4} className="muted">
+                  No subscriptions yet — upgrade from the rider app to see them here.
+                </td>
+              </tr>
+            )}
+            {data.subscriptions.map((s) => (
+              <tr key={s.id}>
+                <td className="mono">{s.userId.slice(0, 14)}…</td>
+                <td>{planLabel(s)}</td>
+                <td>
+                  <span className={`pill sub-${s.status}`}>{s.status}</span>
+                </td>
+                <td className="muted">
+                  {s.currentPeriodEnd ? new Date(s.currentPeriodEnd).toLocaleDateString() : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="tablePanel">
+        <div className="sectionTitle">
+          <h2>Payment history</h2>
+          <span className="muted">{data.payments.length} payments</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Amount (MXN)</th>
+              <th>Status</th>
+              <th>When</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.payments.slice(0, 12).map((p) => (
+              <tr key={p.id}>
+                <td>{p.type}</td>
+                <td>{peso(p.amount)}</td>
+                <td>
+                  <span className={`pill sub-${p.status}`}>{p.status}</span>
+                </td>
+                <td className="muted">{new Date(p.createdAt).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </>
   );
 }

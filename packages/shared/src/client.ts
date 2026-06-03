@@ -7,8 +7,11 @@ import {
   Membership,
   MembershipPlan,
   Payment,
+  PlanDefinition,
   Ride,
   RidePaymentMethod,
+  Subscription,
+  SubscriptionPlan,
   User,
   UserRole,
 } from "./index";
@@ -209,6 +212,31 @@ export class TodoApiClient {
     );
   }
 
+  // --- Tiered subscriptions ------------------------------------------------
+
+  plans() {
+    return this.request<PlanDefinition[]>("GET", "/payments/plans");
+  }
+
+  subscription() {
+    return this.request<Subscription>("GET", "/payments/subscription");
+  }
+
+  subscriptionCheckout(plan: SubscriptionPlan) {
+    return this.request<{ plan: SubscriptionPlan; mode: "mock" | "live"; url: string | null }>(
+      "POST",
+      "/payments/subscription/checkout",
+      { plan },
+    );
+  }
+
+  billingPortal() {
+    return this.request<{ mode: "mock" | "live"; url: string }>(
+      "POST",
+      "/payments/subscription/portal",
+    );
+  }
+
   // --- Admin ---------------------------------------------------------------
 
   adminLive() {
@@ -225,6 +253,10 @@ export class TodoApiClient {
 
   adminPayments() {
     return this.request<Payment[]>("GET", "/payments");
+  }
+
+  adminSubscriptions() {
+    return this.request<Subscription[]>("GET", "/payments/subscriptions");
   }
 }
 

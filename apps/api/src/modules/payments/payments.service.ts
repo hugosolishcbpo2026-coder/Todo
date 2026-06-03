@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import {
+  getPlan,
   MembershipPlan,
   Subscription,
   SubscriptionPlan,
@@ -59,8 +60,22 @@ export class PaymentsService {
     // In mock mode (no Stripe), activate immediately so the flow is testable.
     if (session.mode === "mock") {
       this.applySubscription({ userId, plan, status: "active" });
+      this.recordSubscriptionPayment(userId, plan);
     }
     return { plan, ...session };
+  }
+
+  /** Record a successful subscription charge for payment history / analytics. */
+  recordSubscriptionPayment(userId: string, plan: SubscriptionPlan) {
+    const amount = getPlan(plan)?.priceMxn ?? 0;
+    if (amount <= 0) return;
+    this.store.createPayment({
+      type: "subscription",
+      status: "succeeded",
+      amount,
+      currency: "MXN",
+      riderId: userId,
+    });
   }
 
   async openCustomerPortal(userId: string) {

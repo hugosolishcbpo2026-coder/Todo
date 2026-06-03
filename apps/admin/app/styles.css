@@ -355,6 +355,23 @@ th {
   color: var(--danger);
 }
 
+.banner.warn {
+  background: #fff1dd;
+  border: 1px solid #f0d49b;
+  color: var(--warning);
+}
+
+.pill.sub-active,
+.pill.sub-succeeded,
+.pill.sub-trialing { background: #e1f0e9; color: var(--accent-dark); }
+.pill.sub-past_due,
+.pill.sub-failed { background: #fbeaea; color: var(--danger); }
+.pill.sub-canceled,
+.pill.sub-incomplete,
+.pill.sub-none,
+.pill.sub-pending { background: #eef3f0; color: var(--muted); }
+.pill.sub-refunded { background: #fff1dd; color: var(--warning); }
+
 .skeleton {
   background: linear-gradient(90deg, #eef3f0, #f7faf8, #eef3f0);
   border-radius: 6px;

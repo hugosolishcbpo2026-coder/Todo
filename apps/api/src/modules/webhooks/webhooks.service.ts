@@ -122,6 +122,7 @@ export class WebhooksService {
       stripeCustomerId: this.idOf(session.customer),
       stripeSubscriptionId: this.idOf(session.subscription),
     });
+    this.payments.recordSubscriptionPayment(userId, plan);
   }
 
   private resolveUserId(sub: Stripe.Subscription): string | undefined {

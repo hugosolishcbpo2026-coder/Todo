@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   ActivityIndicator,
+  Linking,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -10,7 +11,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { DriverMatch, FareEstimate, Ride } from "@todo/shared";
+import {
+  DriverMatch,
+  FareEstimate,
+  PlanDefinition,
+  Ride,
+  Subscription,
+  SubscriptionPlan,
+} from "@todo/shared";
 import { api, PRESET_LOCATIONS } from "./src/api";
 import { connectRideSocket } from "./src/socket";
 
@@ -28,18 +36,27 @@ export default function App() {
   const [token, setToken] = useState<string>();
   const [ride, setRide] = useState<Ride>();
   const [match, setMatch] = useState<DriverMatch>();
+  const [showMembership, setShowMembership] = useState(false);
 
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="dark" />
       <View style={styles.header}>
         <Text style={styles.logo}>Todo</Text>
-        <TouchableOpacity style={styles.whatsAppButton}>
-          <Text style={styles.whatsAppText}>WhatsApp</Text>
-        </TouchableOpacity>
+        {token ? (
+          <TouchableOpacity style={styles.membershipButton} onPress={() => setShowMembership((s) => !s)}>
+            <Text style={styles.membershipText}>{showMembership ? "Close" : "Membership"}</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.whatsAppButton}>
+            <Text style={styles.whatsAppText}>WhatsApp</Text>
+          </TouchableOpacity>
+        )}
       </View>
       {!token ? (
         <Login onLogin={setToken} />
+      ) : showMembership ? (
+        <Membership />
       ) : !ride ? (
         <RequestRide
           onRequested={(r, m) => {
@@ -217,6 +234,99 @@ function Tracking({
   );
 }
 
+function Membership() {
+  const [plans, setPlans] = useState<PlanDefinition[]>([]);
+  const [sub, setSub] = useState<Subscription>();
+  const [busy, setBusy] = useState<SubscriptionPlan | null>(null);
+  const [note, setNote] = useState<string>();
+
+  const load = useCallback(async () => {
+    const [p, s] = await Promise.all([api.plans(), api.subscription()]);
+    setPlans(p);
+    setSub(s);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function choose(plan: SubscriptionPlan) {
+    setBusy(plan);
+    setNote(undefined);
+    try {
+      const result = await api.subscriptionCheckout(plan);
+      if (result.url) {
+        setNote(result.mode === "mock" ? "Activated (mock checkout)." : "Opening secure checkout…");
+        if (result.mode === "live") await Linking.openURL(result.url).catch(() => undefined);
+      }
+      await load();
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Checkout failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function manage() {
+    try {
+      const portal = await api.billingPortal();
+      if (portal.url) await Linking.openURL(portal.url).catch(() => undefined);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.membershipPanel}>
+      <Text style={styles.title}>Membership</Text>
+      <Text style={styles.muted}>
+        Current plan: {sub ? `${sub.plan.toUpperCase()} · ${sub.status}` : "…"}
+      </Text>
+      {note ? <Text style={styles.muted}>{note}</Text> : null}
+      {plans.map((plan) => {
+        const current = sub?.plan === plan.id && sub?.status !== "none";
+        return (
+          <View key={plan.id} style={[styles.planCard, current && styles.planCardCurrent]}>
+            <View style={styles.planHead}>
+              <Text style={styles.planName}>{plan.name}</Text>
+              <Text style={styles.planPrice}>
+                {plan.priceMxn === 0 ? "Free" : `$${plan.priceMxn}/mo`}
+              </Text>
+            </View>
+            {plan.features.map((f) => (
+              <Text key={f} style={styles.planFeature}>
+                • {f}
+              </Text>
+            ))}
+            {plan.id === "free" ? null : current ? (
+              <View style={styles.planCurrentTag}>
+                <Text style={styles.planCurrentText}>Current plan</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.planButton}
+                onPress={() => choose(plan.id)}
+                disabled={busy !== null}
+              >
+                {busy === plan.id ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={styles.primaryText}>Choose {plan.name}</Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })}
+      {sub && sub.status !== "none" ? (
+        <TouchableOpacity style={styles.secondary} onPress={manage}>
+          <Text style={styles.secondaryText}>Manage billing</Text>
+        </TouchableOpacity>
+      ) : null}
+    </ScrollView>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.row}>
@@ -232,6 +342,18 @@ const styles = StyleSheet.create({
   logo: { color: "#132622", fontSize: 30, fontWeight: "900" },
   whatsAppButton: { backgroundColor: "#0e8f6f", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
   whatsAppText: { color: "white", fontWeight: "800" },
+  membershipButton: { backgroundColor: "#132622", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
+  membershipText: { color: "white", fontWeight: "800" },
+  membershipPanel: { padding: 18, gap: 12 },
+  planCard: { backgroundColor: "white", borderColor: "#dde6e2", borderRadius: 10, borderWidth: 1, gap: 4, padding: 16 },
+  planCardCurrent: { borderColor: "#0e8f6f", borderWidth: 2 },
+  planHead: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
+  planName: { color: "#132622", fontSize: 18, fontWeight: "900" },
+  planPrice: { color: "#06624e", fontSize: 16, fontWeight: "900" },
+  planFeature: { color: "#687672", fontSize: 13 },
+  planButton: { alignItems: "center", backgroundColor: "#0e8f6f", borderRadius: 8, height: 46, justifyContent: "center", marginTop: 10 },
+  planCurrentTag: { alignItems: "center", backgroundColor: "#e1f0e9", borderRadius: 8, height: 40, justifyContent: "center", marginTop: 10 },
+  planCurrentText: { color: "#06624e", fontWeight: "900" },
   flexPanel: { flexGrow: 1 },
   map: { alignItems: "center", backgroundColor: "#dfeae5", flex: 1, justifyContent: "center", margin: 18, borderRadius: 8, minHeight: 220 },
   pin: { backgroundColor: "#132622", borderRadius: 24, color: "white", fontWeight: "900", overflow: "hidden", padding: 12 },

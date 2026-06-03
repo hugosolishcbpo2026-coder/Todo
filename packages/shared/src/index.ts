@@ -16,7 +16,7 @@ export type DriverStatus = "pending" | "approved" | "rejected" | "suspended";
 export type MembershipStatus = "active" | "expired" | "past_due";
 export type MembershipPlan = "daily" | "monthly";
 export type PaymentStatus = "pending" | "succeeded" | "failed" | "refunded";
-export type PaymentType = "ride" | "membership";
+export type PaymentType = "ride" | "membership" | "subscription";
 export type RidePaymentMethod = "cash" | "card";
 
 export interface GeoPoint {
