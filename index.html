@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Todo — Driver-first ride platform</title>
+    <meta
+      name="description"
+      content="Todo is a driver-first ride-hailing platform: drivers keep 100% of fares, pay a flat membership, no commission. Self-hosted, local-first, WhatsApp-native."
+    />
+    <style>
+      :root {
+        --ink: #0f1c19;
+        --muted: #6b7a75;
+        --line: #dde6e2;
+        --surface: #ffffff;
+        --soft: #f3f7f5;
+        --accent: #0e8f6f;
+        --accent-dark: #06624e;
+        --deep: #102a25;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--soft);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.55;
+      }
+      a { color: var(--accent-dark); }
+      .wrap { max-width: 1040px; margin: 0 auto; padding: 0 22px; }
+
+      /* Hero */
+      header.hero {
+        background: radial-gradient(1200px 600px at 80% -10%, #1c3b34 0%, var(--deep) 55%);
+        color: #eaf3ef;
+        padding: 70px 0 80px;
+      }
+      .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 40px; }
+      .brand .mark {
+        width: 44px; height: 44px; border-radius: 10px; background: var(--accent);
+        display: grid; place-items: center; font-weight: 900; font-size: 24px; color: white;
+      }
+      .brand b { font-size: 20px; letter-spacing: 0.3px; }
+      .hero h1 { font-size: clamp(34px, 5vw, 56px); line-height: 1.05; margin: 0 0 16px; font-weight: 900; }
+      .hero h1 .hl { color: #6fe0bf; }
+      .hero p.lede { font-size: 19px; color: #c4d8d1; max-width: 620px; margin: 0 0 30px; }
+      .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+      .btn {
+        display: inline-block; padding: 13px 22px; border-radius: 10px; font-weight: 800;
+        text-decoration: none; border: 1px solid transparent;
+      }
+      .btn.primary { background: var(--accent); color: white; }
+      .btn.ghost { border-color: #36544c; color: #d7e8e2; }
+      .pills { margin-top: 34px; display: flex; flex-wrap: wrap; gap: 10px; }
+      .pills span {
+        background: rgba(111, 224, 191, 0.12); border: 1px solid rgba(111, 224, 191, 0.3);
+        color: #cdeee2; border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 700;
+      }
+
+      /* Sections */
+      section { padding: 60px 0; }
+      h2 { font-size: 28px; font-weight: 900; margin: 0 0 8px; }
+      .sub { color: var(--muted); margin: 0 0 32px; }
+
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+      .card {
+        background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px;
+      }
+      .card h3 { margin: 0 0 8px; font-size: 17px; }
+      .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+      .card .ic { font-size: 22px; }
+
+      .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+      .step { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+      .step b { display: block; color: var(--accent-dark); font-size: 13px; margin-bottom: 6px; }
+      .step span { font-weight: 700; }
+
+      .split { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+      .stack { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+      .stack ul { margin: 0; padding-left: 18px; color: var(--muted); }
+      .stack li { margin: 6px 0; }
+      .stack li b { color: var(--ink); }
+
+      pre {
+        background: var(--deep); color: #d7e8e2; border-radius: 12px; padding: 18px; overflow: auto;
+        font-size: 13.5px; line-height: 1.6;
+      }
+      .note { background: #fff7ec; border: 1px solid #f0d49b; border-radius: 12px; padding: 14px 16px; color: #8a5a16; font-size: 14px; }
+
+      footer { background: var(--deep); color: #9fb6ae; padding: 30px 0; font-size: 14px; }
+      footer a { color: #cdeee2; }
+
+      @media (max-width: 860px) {
+        .grid, .flow, .split { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="wrap">
+        <div class="brand"><span class="mark">T</span><b>Todo</b></div>
+        <h1>The <span class="hl">driver-first</span> ride platform.</h1>
+        <p class="lede">
+          Drivers keep <b>100% of every fare</b>. No ride commission — ever. The platform earns from a flat
+          membership, not from drivers' trips. Self-hosted, local-first, and WhatsApp-native.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/hugosolishcbpo2026-coder/Todo">View on GitHub</a>
+          <a class="btn ghost" href="#quickstart">Run it locally</a>
+        </div>
+        <div class="pills">
+          <span>0% commission</span>
+          <span>100 MXN/day membership</span>
+          <span>Realtime dispatch</span>
+          <span>WhatsApp notifications</span>
+          <span>Local-first · no cloud lock-in</span>
+        </div>
+      </div>
+    </header>
+
+    <section>
+      <div class="wrap">
+        <h2>Built for a real city launch</h2>
+        <p class="sub">An operational MVP — not a demo. Durable data, live tracking, real billing.</p>
+        <div class="grid">
+          <div class="card"><div class="ic">🚕</div><h3>Driver-first economics</h3><p>Drivers keep 100% of fares. A flat 100 MXN/day membership (discounted monthly) replaces commission. Expired memberships block dispatch.</p></div>
+          <div class="card"><div class="ic">⚡</div><h3>Realtime dispatch</h3><p>Socket.IO pushes ride offers to nearby online drivers and streams live status to riders and the ops dashboard.</p></div>
+          <div class="card"><div class="ic">💬</div><h3>WhatsApp-native</h3><p>OTP login and ride notifications over the WhatsApp Business Cloud API, with a mock fallback for local development.</p></div>
+          <div class="card"><div class="ic">💳</div><h3>Stripe subscriptions</h3><p>Tiered plans with Checkout, Customer Portal, and signature-verified, replay-protected webhooks. State is always server-authoritative.</p></div>
+          <div class="card"><div class="ic">🗄️</div><h3>Durable local data</h3><p>SQLite is the source of truth — rides, earnings, memberships and payments survive restarts. Backups/exports go to your Google account.</p></div>
+          <div class="card"><div class="ic">🔒</div><h3>Secure by default</h3><p>JWT auth with role guards, validated DTOs, and verified webhooks. No secrets in the repo; everything via environment.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section style="background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);">
+      <div class="wrap">
+        <h2>The ride, end to end</h2>
+        <p class="sub">Every step is wired and verified — rider to driver to dashboard.</p>
+        <div class="flow">
+          <div class="step"><b>01 · RIDER</b><span>Requests a ride</span></div>
+          <div class="step"><b>02 · DISPATCH</b><span>Nearest eligible driver is offered</span></div>
+          <div class="step"><b>03 · DRIVER</b><span>Accepts, arrives, completes</span></div>
+          <div class="step"><b>04 · LEDGER</b><span>Earnings update · 0% commission</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="split">
+          <div>
+            <h2>Architecture</h2>
+            <p class="sub">A pnpm/TypeScript monorepo. Local-first runtime, GitHub for source.</p>
+            <div class="stack">
+              <ul>
+                <li><b>apps/api</b> — NestJS API: auth, riders, drivers, rides, dispatch, payments, membership, realtime gateway, WhatsApp, webhooks</li>
+                <li><b>apps/admin</b> — Next.js operations dashboard (live)</li>
+                <li><b>apps/rider · apps/driver</b> — React Native (Expo)</li>
+                <li><b>packages/shared</b> — typed API client + domain contracts</li>
+                <li><b>SQLite</b> source of truth · <b>Socket.IO</b> realtime · <b>Stripe</b> billing</li>
+              </ul>
+            </div>
+          </div>
+          <div id="quickstart">
+            <h2>Run it locally</h2>
+            <p class="sub">No Docker required. No cloud required.</p>
+<pre>corepack pnpm@9.12.3 install
+corepack pnpm@9.12.3 build
+
+# seed demo data + start the API and admin
+corepack pnpm@9.12.3 --filter @todo/api db:seed
+corepack pnpm@9.12.3 dev
+
+# API   http://localhost:4000  (Swagger at /docs)
+# Admin http://localhost:3000</pre>
+            <p class="note">This page is a static overview hosted on GitHub Pages. The platform itself is a server application (API + database + websockets) and runs on your own machine — it is not hosted here.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="wrap">
+        Todo — driver-first ride platform ·
+        <a href="https://github.com/hugosolishcbpo2026-coder/Todo">github.com/hugosolishcbpo2026-coder/Todo</a>
+        · Self-hosted &amp; local-first.
+      </div>
+    </footer>
+  </body>
+</html>
